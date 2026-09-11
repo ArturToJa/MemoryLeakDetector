@@ -97,7 +97,12 @@ namespace PlatformStackTrace
     }
 }
 
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
+
+// backtrace() is the same BSD-heritage API on Linux (glibc) and macOS
+// (libSystem), so the walk/format logic below is shared; only symbol
+// resolution differs per platform (see SymbolResolver.cpp: addr2line vs
+// atos) and lives entirely behind SymbolResolver::resolve().
 
 #include <execinfo.h>
 #include <cstdio>
@@ -196,9 +201,9 @@ namespace PlatformStackTrace
 
 #else
 
-// No stack-trace implementation for this platform yet (only Windows and
-// Linux are done). Allocations are still tracked and reported, just
-// without a symbolized (or even raw-address) call stack attached.
+// No stack-trace implementation for this platform yet (only Windows,
+// Linux, and macOS are done). Allocations are still tracked and reported,
+// just without a symbolized (or even raw-address) call stack attached.
 namespace PlatformStackTrace
 {
     StackTrace capture(std::size_t)

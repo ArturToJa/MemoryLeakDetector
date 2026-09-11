@@ -33,6 +33,27 @@ jobs:
       - name: Test
         run: ctest --preset ${{ matrix.preset }} --output-on-failure
 
+  macos:
+    name: macOS (${{ matrix.preset }})
+    runs-on: macos-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [ macos-debug ]
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }} --output-on-failure
+
   linux:
     name: Linux (${{ matrix.preset }})
     runs-on: ubuntu-latest
