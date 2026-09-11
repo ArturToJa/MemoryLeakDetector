@@ -71,6 +71,13 @@ void Runtime::shutdown()
 
 namespace
 {
+    // Starts the tracker at static-init time. Because C++ only guarantees
+    // initialization order within a single translation unit, any allocation
+    // made by a *different* TU's global/static constructor that happens to
+    // run before this one (link order is otherwise unspecified) will not be
+    // tracked - trackAllocation/trackDeallocation in NewDelete.cpp silently
+    // no-op until Runtime::isInitialized() is true. In practice this means
+    // very early, static-init-time allocations are a known blind spot.
     struct RuntimeInitializer
     {
         RuntimeInitializer()

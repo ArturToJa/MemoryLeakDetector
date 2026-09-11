@@ -20,6 +20,8 @@ SymbolResolver& SymbolResolver::instance()
 
 bool SymbolResolver::initialize()
 {
+    std::lock_guard<std::mutex> lock(mutex);
+
     if (initialized)
         return true;
 
@@ -42,6 +44,8 @@ bool SymbolResolver::initialize()
 
 void SymbolResolver::shutdown()
 {
+    std::lock_guard<std::mutex> lock(mutex);
+
     if (!initialized)
         return;
 
@@ -61,6 +65,8 @@ bool SymbolResolver::resolve(
     function.clear();
     file.clear();
     line = 0;
+
+    std::lock_guard<std::mutex> lock(mutex);
 
     if (!initialized)
         return false;

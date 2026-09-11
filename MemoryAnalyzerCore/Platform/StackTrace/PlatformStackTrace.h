@@ -7,6 +7,8 @@
 
 namespace PlatformStackTrace
 {
+    constexpr std::size_t kMaxStackFrames = 32;
+
     using StackTrace = std::vector<std::uintptr_t>;
 
     struct SymbolizedFrame

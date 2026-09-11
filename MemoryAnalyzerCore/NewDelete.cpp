@@ -1,3 +1,11 @@
+// MemoryAnalyzerCore only intercepts C++ allocation (operator new/delete and
+// their sized/aligned/nothrow variants). Raw malloc/free, C libraries, and
+// third-party code that allocates outside of operator new are out of scope
+// here by design - link-time interception can only override symbols the
+// linker actually resolves through this library. Broader, allocator-agnostic
+// interception (e.g. hooking malloc/free at the process level) belongs to
+// the injection-based MemoryAnalyzer DLL instead.
+
 #include "pch.h"
 #include "Runtime.h"
 #include "Tracker.h"

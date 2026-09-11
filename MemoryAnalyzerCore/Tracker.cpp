@@ -43,7 +43,7 @@ void Tracker::onAllocate(
         << " bytes\n";
 }
 
-void Tracker::onDeallocate(void* address)
+void Tracker::onDeallocate(void* address, std::size_t size)
 {
     if (TrackingGuard::isTrackingDisabled())
         return;
@@ -62,6 +62,18 @@ void Tracker::onDeallocate(void* address)
         return;
     }
 
+    if (size != 0 && size != it->second.size)
+    {
+        std::cout
+            << "[SIZE MISMATCH] "
+            << address
+            << " | freed as "
+            << size
+            << " bytes but allocated as "
+            << it->second.size
+            << " bytes\n";
+    }
+
     std::cout
         << "[FREE] "
         << address
@@ -72,11 +84,30 @@ void Tracker::onDeallocate(void* address)
     allocations.erase(it);
 }
 
+std::vector<LeakInfo> Tracker::getLeaks() const
+{
+    std::vector<LeakInfo> leaks;
+    leaks.reserve(allocations.size());
+
+    for (const auto& [address, info] : allocations)
+    {
+        leaks.push_back({
+            address,
+            info.size,
+            info.stackTrace
+            });
+    }
+
+    return leaks;
+}
+
 void Tracker::reportLeaks() const
 {
     std::cout << "\n========== LEAK REPORT ==========\n";
 
-    if (allocations.empty())
+    auto leaks = getLeaks();
+
+    if (leaks.empty())
     {
         std::cout << "No leaks detected.\n";
         return;
@@ -84,24 +115,24 @@ void Tracker::reportLeaks() const
 
     std::size_t total = 0;
 
-    for (const auto& [address, info] : allocations)
+    for (const auto& leak : leaks)
     {
         std::cout
             << "[LEAK] "
-            << address
+            << leak.address
             << " | "
-            << info.size
+            << leak.size
             << " bytes\n";
 
         std::cout << "  Stack trace:\n";
 
         auto symbolizedTrace =
-            PlatformStackTrace::symbolize(info.stackTrace);
+            PlatformStackTrace::symbolize(leak.stackTrace);
 
         std::cout
             << PlatformStackTrace::format(symbolizedTrace);
 
-        total += info.size;
+        total += leak.size;
     }
 
     std::cout

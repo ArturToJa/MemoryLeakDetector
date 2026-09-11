@@ -49,7 +49,8 @@ void TrackerThread::run()
 
         case EventType::Deallocate:
             tracker.onDeallocate(
-                event->address
+                event->address,
+                event->size
             );
 
             break;

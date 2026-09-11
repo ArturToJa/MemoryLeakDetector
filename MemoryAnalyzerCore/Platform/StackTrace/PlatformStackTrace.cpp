@@ -12,13 +12,11 @@ namespace PlatformStackTrace
 {
     StackTrace capture(std::size_t skipFrames)
     {
-        constexpr std::size_t maxFrames = 32;
-
-        void* frames[maxFrames];
+        void* frames[kMaxStackFrames];
 
         USHORT count = CaptureStackBackTrace(
             static_cast<DWORD>(skipFrames + 1),
-            static_cast<DWORD>(maxFrames),
+            static_cast<DWORD>(kMaxStackFrames),
             frames,
             nullptr
         );
