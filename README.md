@@ -27,7 +27,7 @@ Total leaked: 268 bytes
 
 This is a deliberately scoped, link-time tool, not a full memory debugger:
 
-- Only C++ allocation (`operator new`/`delete` and their variants) is intercepted - raw `malloc`/`free` and anything allocated by other libraries outside `operator new` is out of reach here by design.
+- Only C++ allocation (`operator new`/`delete` and their variants) is intercepted - raw `malloc`/`free`/`calloc`/`realloc` and anything allocated by other libraries outside `operator new` is out of reach here, and deliberately so: `operator new`/`delete` are portably replaceable *by the C++ standard itself*, which is exactly why a plain static library can override them uniformly across MSVC/GCC/Clang with no platform-specific code. `malloc` has no equivalent standard replacement mechanism - overriding it always means adopting some form of load-time interposition instead (glibc's undocumented `__libc_malloc` + `dlsym(RTLD_NEXT, ...)` via `LD_PRELOAD` on Linux, IAT patching on Windows, `DYLD_INTERPOSE` via `DYLD_INSERT_LIBRARIES` on macOS). That's a fundamentally different mechanism than "link a static lib and it works," and it's exactly the mechanism the injection-based `MemoryAnalyzer` DLL is for - `malloc` support belongs there, not here. (One thing worth carrying over when that work starts: `operator new` on Linux/libstdc++ typically calls `malloc` internally, so hooking both in the same process would double-count a single `new` as two events unless something suppresses the inner one - the `InterceptorGuard`/`TrackingGuard` reentrancy guards already in Core happen to solve exactly this, being thread-local and scoped to the whole call chain rather than one function, so that piece likely ports over as-is.) Lower-level allocation (`mmap`/`VirtualAlloc`, a custom arena/pool allocator, a `std::pmr` resource backed by its own buffer, an embedded interpreter's own allocator) is out of reach for any generic tool unless it happens to route through `operator new`/`malloc` internally - not something either half of this project can chase in general.
 - Very early allocations (from another translation unit's global constructor that happens to run before this library's own static initializer) can go untracked - narrowed via `#pragma init_seg(lib)` / `__attribute__((init_priority))`, but not eliminated; see the comment on `RuntimeInitializer` in [Runtime.cpp](MemoryAnalyzerCore/Runtime.cpp).
 - A global/static object that's intentionally alive for the whole process lifetime (never explicitly freed, but not actually a bug) will show up in the report as a leak - this tool doesn't yet distinguish "definitely lost" from "still reachable" the way tools like LeakSanitizer do.
 - Only single-module coverage: allocations inside a different module (a DLL/shared library that doesn't itself link `MemoryAnalyzerCore`) are invisible to it. That's the gap the injection-based `MemoryAnalyzer` DLL (in progress, see below) is meant to close.
@@ -37,13 +37,15 @@ This is a deliberately scoped, link-time tool, not a full memory debugger:
 Requires CMake 3.21+ and a C++20 compiler.
 
 ```bash
-cmake --preset x64-Debug      # Windows (MSVC)
-cmake --preset linux-debug    # Linux (GCC/Clang)
+cmake --preset x64-Debug           # Windows (MSVC)
+cmake --preset x64-clang-cl-Debug  # Windows (clang-cl)
+cmake --preset linux-debug         # Linux (default toolchain, typically GCC)
+cmake --preset linux-clang-debug   # Linux (Clang)
 cmake --build --preset <preset-name>
 ctest --preset <preset-name> --output-on-failure
 ```
 
-CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) builds and runs the full test suite on Windows/MSVC on every push; the Linux preset builds and runs on Ubuntu/GCC alongside it.
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the full test suite on every push across all four combinations above (MSVC, clang-cl, GCC, Clang).
 
 ## Project layout
 
