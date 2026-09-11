@@ -38,6 +38,11 @@ target_compile_features(MemoryAnalyzerCore
         cxx_std_20
 )
 
+target_link_libraries(MemoryAnalyzerCore
+    PUBLIC
+        Threads::Threads
+)
+
 if (WIN32)
     target_link_libraries(MemoryAnalyzerCore
         PRIVATE

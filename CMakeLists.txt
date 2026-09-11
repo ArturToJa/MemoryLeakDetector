@@ -7,6 +7,8 @@ project(MemoryAnalyzer
 
 enable_testing()
 
+find_package(Threads REQUIRED)
+
 add_subdirectory(MemoryAnalyzerCore)
 add_subdirectory(TestApp)
 add_subdirectory(tests)
