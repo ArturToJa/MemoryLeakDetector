@@ -13,4 +13,5 @@ public:
 
 private:
     static std::atomic<bool> initialized;
+    static std::atomic<bool> shutdownComplete;
 };

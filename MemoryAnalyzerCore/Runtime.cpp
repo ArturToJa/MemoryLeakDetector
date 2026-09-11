@@ -31,6 +31,7 @@ namespace
 }
 
 std::atomic<bool> Runtime::initialized = false;
+std::atomic<bool> Runtime::shutdownComplete = false;
 
 bool Runtime::isInitialized()
 {
@@ -44,6 +45,11 @@ EventQueue& Runtime::getEventQueue()
 
 void Runtime::initialize()
 {
+    // Once shutdown() has run, never re-initialize - see the comment on
+    // shutdownComplete's use in shutdown() below for why this matters.
+    if (shutdownComplete)
+        return;
+
     // std::call_once makes this safe against genuinely concurrent calls from
     // different threads (one runs the body, the rest block until it's done).
     // The InterceptorGuard inside the body is a separate concern: it stops
@@ -83,6 +89,17 @@ void Runtime::shutdown()
     getTracker().reportLeaks();
 
     SymbolResolver::instance().shutdown();
+
+    // NewDelete.cpp's self-initializing fallback means *any* allocation or
+    // deallocation, anywhere, can call Runtime::initialize() again - and
+    // other globals' destructors (in other TUs, whose relative order versus
+    // this one is unspecified) can still run after this point and do
+    // exactly that. Without this latch, such a call would try to reuse
+    // initOnce/the tracker thread/etc. mid-teardown, which is exactly the
+    // "mutex lock failed: Invalid argument" libc++abi crash observed in
+    // practice on macOS during static destruction. Past this point,
+    // tracking is simply over - there's nothing left to report to.
+    shutdownComplete = true;
 }
 
 // Push this translation unit's dynamic initializers as early as the
