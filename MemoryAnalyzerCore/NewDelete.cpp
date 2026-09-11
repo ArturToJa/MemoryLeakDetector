@@ -19,17 +19,32 @@
 
 namespace
 {
+    // Runtime's static initializer (see Runtime.cpp) tries to run as early as
+    // the toolchain allows, but that's only ever a best-effort head start -
+    // on some platforms/linkers (observed on Darwin, where neither
+    // #pragma init_seg nor __attribute__((init_priority)) apply) a different
+    // translation unit's global can still allocate before it. Rather than
+    // lose that allocation, initialize on first use here instead of just
+    // bailing out: this guarantees the very first operator new/delete call
+    // anywhere in the process turns tracking on, regardless of which
+    // translation unit's static initializer happened to run first.
+    // Runtime::initialize() takes care of its own reentrancy guarding
+    // internally (see Runtime.cpp) - it's not repeated here.
+    void ensureInitialized()
+    {
+        if (!Runtime::isInitialized())
+            Runtime::initialize();
+    }
+
     void trackAllocation(void* ptr, std::size_t size)
     {
         if (!ptr)
             return;
 
-        if (!Runtime::isInitialized() ||
-            InterceptorGuard::isDisabled() ||
-            TrackingGuard::isTrackingDisabled())
-        {
+        if (InterceptorGuard::isDisabled() || TrackingGuard::isTrackingDisabled())
             return;
-        }
+
+        ensureInitialized();
 
         InterceptorGuard guard;
 
@@ -48,12 +63,10 @@ namespace
         if (!ptr)
             return;
 
-        if (!Runtime::isInitialized() ||
-            InterceptorGuard::isDisabled() ||
-            TrackingGuard::isTrackingDisabled())
-        {
+        if (InterceptorGuard::isDisabled() || TrackingGuard::isTrackingDisabled())
             return;
-        }
+
+        ensureInitialized();
 
         InterceptorGuard guard;
 

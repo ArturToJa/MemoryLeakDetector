@@ -1,5 +1,7 @@
 #include "EventQueue.h"
 
+#include <atomic>
+
 class Runtime
 {
 public:
@@ -10,5 +12,5 @@ public:
     static EventQueue& getEventQueue();
 
 private:
-    static bool initialized;
+    static std::atomic<bool> initialized;
 };

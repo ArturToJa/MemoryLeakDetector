@@ -3,10 +3,11 @@
 #include "EventQueue.h"
 #include "Tracker.h"
 #include "TrackerThread.h"
+#include "InterceptorGuard.h"
 #include "Platform/StackTrace/SymbolResolver.h"
 
 #include <cstdlib>
-#include <iostream>
+#include <mutex>
 
 namespace
 {
@@ -25,9 +26,11 @@ namespace
 
         return thread;
     }
+
+    std::once_flag initOnce;
 }
 
-bool Runtime::initialized = false;
+std::atomic<bool> Runtime::initialized = false;
 
 bool Runtime::isInitialized()
 {
@@ -41,19 +44,32 @@ EventQueue& Runtime::getEventQueue()
 
 void Runtime::initialize()
 {
-    if (initialized)
-        return;
+    // std::call_once makes this safe against genuinely concurrent calls from
+    // different threads (one runs the body, the rest block until it's done).
+    // The InterceptorGuard inside the body is a separate concern: it stops
+    // this function's own internal allocations (Tracker's map, the event
+    // queue, the tracker thread) from being mistaken for user allocations
+    // and re-entering this same call on the SAME thread via
+    // NewDelete.cpp's self-initializing fallback - without it, the very
+    // first allocation made by e.g. Tracker's constructor would trigger
+    // that fallback, which would call back into this still-in-progress,
+    // not-yet-initialized function and deadlock on getTracker()'s
+    // function-local-static guard (observed in practice, not hypothetical).
+    std::call_once(initOnce, []
+    {
+        InterceptorGuard guard;
 
-    getTracker();
-    getEventQueueInternal();
+        getTracker();
+        getEventQueueInternal();
 
-    SymbolResolver::instance().initialize();
+        SymbolResolver::instance().initialize();
 
-    getTrackerThread().start();
+        getTrackerThread().start();
 
-    std::atexit(&Runtime::shutdown);
+        std::atexit(&Runtime::shutdown);
 
-    initialized = true;
+        initialized = true;
+    });
 }
 
 void Runtime::shutdown()
@@ -86,18 +102,19 @@ void Runtime::shutdown()
 namespace
 {
     // Starts the tracker at static-init time. Because C++ only guarantees
-    // initialization order within a single translation unit, any allocation
-    // made by a *different* TU's global/static constructor that happens to
-    // run before this one will not be tracked - trackAllocation/
-    // trackDeallocation in NewDelete.cpp silently no-op until
-    // Runtime::isInitialized() is true. The init_seg/init_priority hints
-    // above narrow that race by making this run as early as the toolchain
-    // permits, but they cannot guarantee it wins against another library
-    // doing the same trick, nor against CRT/loader-level allocation that
-    // happens before any C++ global constructor runs at all, nor against
-    // allocations made inside other modules (DLLs/shared libraries) that
-    // don't link this static library - those are out of reach here by
-    // design (see the injection-based MemoryAnalyzer DLL for that case).
+    // initialization order within a single translation unit, a different
+    // TU's global/static constructor can still run - and allocate - before
+    // this one, and the init_seg/init_priority hints above can't guarantee
+    // otherwise (observed in practice on Darwin, where neither applies at
+    // all). That used to mean the allocation was silently untracked;
+    // trackAllocation/trackDeallocation in NewDelete.cpp now self-initialize
+    // on first use instead, so this constructor winning the race is purely
+    // an optimization (the tracker thread gets started slightly sooner)
+    // rather than a correctness requirement. What's still genuinely out of
+    // reach: CRT/loader-level allocation that happens before any C++ global
+    // constructor runs at all, and allocations made inside other modules
+    // (DLLs/shared libraries) that don't link this static library - see the
+    // injection-based MemoryAnalyzer DLL for that case.
     struct RuntimeInitializer
     {
         RuntimeInitializer()
