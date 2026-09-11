@@ -1,29 +1,6 @@
 add_library(MemoryAnalyzerCore STATIC
-    Tracker.cpp
-    Tracker.h
-
-    EventQueue.cpp
-    EventQueue.h
-
-    TrackerThread.cpp
-    TrackerThread.h
-
     Runtime.cpp
     Runtime.h
-
-    Events.h
-
-    InterceptorGuard.cpp
-    InterceptorGuard.h
-
-    PlatformMemory.cpp
-    PlatformMemory.h
-
-    Platform/StackTrace/PlatformStackTrace.cpp
-    Platform/StackTrace/PlatformStackTrace.h
-
-    Platform/StackTrace/SymbolResolver.cpp
-    Platform/StackTrace/SymbolResolver.h
 
     NewDelete.cpp
 )
@@ -40,13 +17,5 @@ target_compile_features(MemoryAnalyzerCore
 
 target_link_libraries(MemoryAnalyzerCore
     PUBLIC
-        Threads::Threads
-        ${CMAKE_DL_LIBS}
+        MemoryAnalyzerEngine
 )
-
-if (WIN32)
-    target_link_libraries(MemoryAnalyzerCore
-        PRIVATE
-            dbghelp
-    )
-endif()

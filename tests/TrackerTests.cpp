@@ -1,6 +1,7 @@
 #include "Tracker.h"
 
 #include <cstdio>
+#include <sstream>
 
 namespace
 {
@@ -78,6 +79,24 @@ int main()
 
         expect(tracker.getLeaks().empty(),
             "a tracker with no allocations reports no leaks");
+    }
+
+    // A Tracker bound to a custom sink writes there, not to std::cout -
+    // this is what lets an injected library redirect reporting to a log
+    // file instead of a console it may not have.
+    {
+        std::ostringstream sink;
+        Tracker tracker(sink);
+
+        int a = 0;
+
+        tracker.onAllocate(&a, 4, {});
+        tracker.reportLeaks();
+
+        expect(sink.str().find("[ALLOC]") != std::string::npos,
+            "a Tracker bound to a custom sink writes onAllocate output there");
+        expect(sink.str().find("[LEAK]") != std::string::npos,
+            "a Tracker bound to a custom sink writes reportLeaks output there");
     }
 
     if (failures == 0)

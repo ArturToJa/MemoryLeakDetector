@@ -35,7 +35,7 @@ void Tracker::onAllocate(
         stackTrace
     };
 
-    std::cout
+    output
         << "[ALLOC] "
         << address
         << " | "
@@ -54,7 +54,7 @@ void Tracker::onDeallocate(void* address, std::size_t size)
 
     if (it == allocations.end())
     {
-        std::cout
+        output
             << "[FREE?] "
             << address
             << " | unknown allocation\n";
@@ -64,7 +64,7 @@ void Tracker::onDeallocate(void* address, std::size_t size)
 
     if (size != 0 && size != it->second.size)
     {
-        std::cout
+        output
             << "[SIZE MISMATCH] "
             << address
             << " | freed as "
@@ -74,7 +74,7 @@ void Tracker::onDeallocate(void* address, std::size_t size)
             << " bytes\n";
     }
 
-    std::cout
+    output
         << "[FREE] "
         << address
         << " | "
@@ -103,13 +103,13 @@ std::vector<LeakInfo> Tracker::getLeaks() const
 
 void Tracker::reportLeaks() const
 {
-    std::cout << "\n========== LEAK REPORT ==========\n";
+    output << "\n========== LEAK REPORT ==========\n";
 
     auto leaks = getLeaks();
 
     if (leaks.empty())
     {
-        std::cout << "No leaks detected.\n";
+        output << "No leaks detected.\n";
         return;
     }
 
@@ -117,25 +117,25 @@ void Tracker::reportLeaks() const
 
     for (const auto& leak : leaks)
     {
-        std::cout
+        output
             << "[LEAK] "
             << leak.address
             << " | "
             << leak.size
             << " bytes\n";
 
-        std::cout << "  Stack trace:\n";
+        output << "  Stack trace:\n";
 
         auto symbolizedTrace =
             PlatformStackTrace::symbolize(leak.stackTrace);
 
-        std::cout
+        output
             << PlatformStackTrace::format(symbolizedTrace);
 
         total += leak.size;
     }
 
-    std::cout
+    output
         << "Total leaked: "
         << total
         << " bytes\n";

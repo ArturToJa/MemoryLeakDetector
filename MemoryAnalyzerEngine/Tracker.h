@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <iostream>
 #include <unordered_map>
 #include <vector>
 #include "Platform/StackTrace/PlatformStackTrace.h"
@@ -15,6 +16,14 @@ struct LeakInfo
 class Tracker
 {
 public:
+    // Defaults to std::cout so existing callers (Core's getTracker()
+    // singleton) are unaffected; an injected library can instead bind its
+    // own Tracker to a log file, since it has no console it can rely on.
+    explicit Tracker(std::ostream& output = std::cout)
+        : output(output)
+    {
+    }
+
     void onAllocate(
         void* address,
         std::size_t size,
@@ -39,6 +48,7 @@ private:
         PlatformStackTrace::StackTrace stackTrace;
     };
 
+    std::ostream& output;
     std::unordered_map<void*, AllocationInfo> allocations;
 };
 
