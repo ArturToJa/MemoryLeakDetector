@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  windows-msvc:
+    name: Windows (MSVC, x64-Debug)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Configure
+        run: cmake --preset x64-Debug
+
+      - name: Build
+        run: cmake --build --preset x64-Debug
+
+      - name: Test
+        run: ctest --preset x64-Debug --output-on-failure
