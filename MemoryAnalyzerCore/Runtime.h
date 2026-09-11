@@ -9,6 +9,7 @@ public:
     static void shutdown();
 
     static bool isInitialized();
+    static bool isShutdownComplete();
     static EventQueue& getEventQueue();
 
 private:

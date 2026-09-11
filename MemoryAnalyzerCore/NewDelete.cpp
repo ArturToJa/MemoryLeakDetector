@@ -30,10 +30,30 @@ namespace
     // translation unit's static initializer happened to run first.
     // Runtime::initialize() takes care of its own reentrancy guarding
     // internally (see Runtime.cpp) - it's not repeated here.
-    void ensureInitialized()
+    //
+    // Returns whether tracking is actually usable right now. Once
+    // Runtime::shutdown() has run, EventQueue/Tracker/etc. are past the
+    // point where anything should touch them again - they're ordinary
+    // static-duration objects that get torn down like any other, on a
+    // schedule this code has no control over, and a *different*
+    // translation unit's global destructor (running later - cross-TU
+    // destruction order is just as unspecified as construction order) can
+    // still allocate or deallocate after they're gone. Calling
+    // Runtime::getEventQueue().push() at that point would lock an
+    // already-destroyed mutex - this is not hypothetical, it's the exact
+    // "mutex lock failed" crash observed on macOS in CI. So once shutdown
+    // has completed, the right answer is to drop the event, not queue it.
+    bool ensureInitialized()
     {
-        if (!Runtime::isInitialized())
-            Runtime::initialize();
+        if (Runtime::isInitialized())
+            return true;
+
+        if (Runtime::isShutdownComplete())
+            return false;
+
+        Runtime::initialize();
+
+        return Runtime::isInitialized();
     }
 
     void trackAllocation(void* ptr, std::size_t size)
@@ -44,7 +64,8 @@ namespace
         if (InterceptorGuard::isDisabled() || TrackingGuard::isTrackingDisabled())
             return;
 
-        ensureInitialized();
+        if (!ensureInitialized())
+            return;
 
         InterceptorGuard guard;
 
@@ -66,7 +87,8 @@ namespace
         if (InterceptorGuard::isDisabled() || TrackingGuard::isTrackingDisabled())
             return;
 
-        ensureInitialized();
+        if (!ensureInitialized())
+            return;
 
         InterceptorGuard guard;
 

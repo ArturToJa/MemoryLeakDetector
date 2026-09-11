@@ -38,6 +38,11 @@ bool Runtime::isInitialized()
     return initialized;
 }
 
+bool Runtime::isShutdownComplete()
+{
+    return shutdownComplete;
+}
+
 EventQueue& Runtime::getEventQueue()
 {
     return getEventQueueInternal();
