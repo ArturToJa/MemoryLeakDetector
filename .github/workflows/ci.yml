@@ -7,9 +7,14 @@ on:
     branches: [ main ]
 
 jobs:
-  windows-msvc:
-    name: Windows (MSVC, x64-Debug)
+  windows:
+    name: Windows (${{ matrix.preset }})
     runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [ x64-Debug, x64-clang-cl-Debug ]
 
     steps:
       - uses: actions/checkout@v5
@@ -20,26 +25,31 @@ jobs:
           arch: x64
 
       - name: Configure
-        run: cmake --preset x64-Debug
+        run: cmake --preset ${{ matrix.preset }}
 
       - name: Build
-        run: cmake --build --preset x64-Debug
+        run: cmake --build --preset ${{ matrix.preset }}
 
       - name: Test
-        run: ctest --preset x64-Debug --output-on-failure
+        run: ctest --preset ${{ matrix.preset }} --output-on-failure
 
-  linux-gcc:
-    name: Linux (GCC, linux-debug)
+  linux:
+    name: Linux (${{ matrix.preset }})
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [ linux-debug, linux-clang-debug ]
 
     steps:
       - uses: actions/checkout@v5
 
       - name: Configure
-        run: cmake --preset linux-debug
+        run: cmake --preset ${{ matrix.preset }}
 
       - name: Build
-        run: cmake --build --preset linux-debug
+        run: cmake --build --preset ${{ matrix.preset }}
 
       - name: Test
-        run: ctest --preset linux-debug --output-on-failure
+        run: ctest --preset ${{ matrix.preset }} --output-on-failure

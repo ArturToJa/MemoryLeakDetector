@@ -45,7 +45,7 @@
     },
     {
       "name": "x64-Debug",
-      "displayName": "Windows x64 Debug",
+      "displayName": "Windows x64 Debug (MSVC)",
       "inherits": "windows-base",
       "architecture": {
         "value": "x64",
@@ -57,7 +57,7 @@
     },
     {
       "name": "x64-Release",
-      "displayName": "Windows x64 Release",
+      "displayName": "Windows x64 Release (MSVC)",
       "inherits": "windows-base",
       "architecture": {
         "value": "x64",
@@ -68,8 +68,36 @@
       }
     },
     {
+      "name": "x64-clang-cl-Debug",
+      "displayName": "Windows x64 Debug (clang-cl)",
+      "inherits": "windows-base",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "clang-cl",
+        "CMAKE_CXX_COMPILER": "clang-cl"
+      }
+    },
+    {
+      "name": "x64-clang-cl-Release",
+      "displayName": "Windows x64 Release (clang-cl)",
+      "inherits": "windows-base",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "clang-cl",
+        "CMAKE_CXX_COMPILER": "clang-cl"
+      }
+    },
+    {
       "name": "linux-debug",
-      "displayName": "Linux Debug",
+      "displayName": "Linux Debug (default toolchain)",
       "inherits": "linux-base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug"
@@ -77,10 +105,30 @@
     },
     {
       "name": "linux-release",
-      "displayName": "Linux Release",
+      "displayName": "Linux Release (default toolchain)",
       "inherits": "linux-base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "linux-clang-debug",
+      "displayName": "Linux Debug (Clang)",
+      "inherits": "linux-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
+      "name": "linux-clang-release",
+      "displayName": "Linux Release (Clang)",
+      "inherits": "linux-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++"
       }
     },
     {
@@ -103,16 +151,24 @@
   "buildPresets": [
     { "name": "x64-Debug", "configurePreset": "x64-Debug" },
     { "name": "x64-Release", "configurePreset": "x64-Release" },
+    { "name": "x64-clang-cl-Debug", "configurePreset": "x64-clang-cl-Debug" },
+    { "name": "x64-clang-cl-Release", "configurePreset": "x64-clang-cl-Release" },
     { "name": "linux-debug", "configurePreset": "linux-debug" },
     { "name": "linux-release", "configurePreset": "linux-release" },
+    { "name": "linux-clang-debug", "configurePreset": "linux-clang-debug" },
+    { "name": "linux-clang-release", "configurePreset": "linux-clang-release" },
     { "name": "macos-debug", "configurePreset": "macos-debug" },
     { "name": "macos-release", "configurePreset": "macos-release" }
   ],
   "testPresets": [
     { "name": "x64-Debug", "configurePreset": "x64-Debug" },
     { "name": "x64-Release", "configurePreset": "x64-Release" },
+    { "name": "x64-clang-cl-Debug", "configurePreset": "x64-clang-cl-Debug" },
+    { "name": "x64-clang-cl-Release", "configurePreset": "x64-clang-cl-Release" },
     { "name": "linux-debug", "configurePreset": "linux-debug" },
     { "name": "linux-release", "configurePreset": "linux-release" },
+    { "name": "linux-clang-debug", "configurePreset": "linux-clang-debug" },
+    { "name": "linux-clang-release", "configurePreset": "linux-clang-release" },
     { "name": "macos-debug", "configurePreset": "macos-debug" },
     { "name": "macos-release", "configurePreset": "macos-release" }
   ]
