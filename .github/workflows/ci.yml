@@ -27,3 +27,19 @@ jobs:
 
       - name: Test
         run: ctest --preset x64-Debug --output-on-failure
+
+  linux-gcc:
+    name: Linux (GCC, linux-debug)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure
+        run: cmake --preset linux-debug
+
+      - name: Build
+        run: cmake --build --preset linux-debug
+
+      - name: Test
+        run: ctest --preset linux-debug --output-on-failure

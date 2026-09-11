@@ -41,6 +41,7 @@ target_compile_features(MemoryAnalyzerCore
 target_link_libraries(MemoryAnalyzerCore
     PUBLIC
         Threads::Threads
+        ${CMAKE_DL_LIBS}
 )
 
 if (WIN32)
