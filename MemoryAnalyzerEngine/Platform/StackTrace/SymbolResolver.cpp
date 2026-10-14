@@ -514,4 +514,4 @@ bool SymbolResolver::resolve(
     return false;
 }
 
-#endif
+#endif
