@@ -14,3 +14,8 @@ add_subdirectory(MemoryAnalyzerCore)
 add_subdirectory(MemoryAnalyzer)
 add_subdirectory(TestApp)
 add_subdirectory(tests)
+
+# Windows-only demo that builds and runs the injector against a leaky app.
+if (WIN32)
+    add_subdirectory(TestDLLApp)
+endif()

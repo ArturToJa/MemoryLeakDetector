@@ -96,6 +96,7 @@ CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the full test s
 | `MemoryAnalyzerCore/` | The link-time mode: `operator new`/`delete` overrides plus auto-start runtime - link it into any target. |
 | `MemoryAnalyzer/` | The injection mode: `LD_PRELOAD` library on Linux, launcher + injected DLL on Windows (the target is empty on macOS for now). `MemoryAnalyzer/tests/` holds `LeakyTarget` and the CTest scenarios that run it under the injector and check the log. |
 | `TestApp/` | A manual smoke test exercising every allocation form (plain/array/nothrow/aligned, matched frees, deliberate leaks). |
+| `TestDLLApp/` | Windows-only demo target: building it also builds `MemoryAnalyzer.dll` and the launcher, and running it (F5 in Visual Studio's folder mode) re-launches itself through the launcher with the DLL injected, then prints the leak report. |
 | `tests/` | Automated tests: `Tracker` unit tests, and end-to-end lifetime scenarios (global objects, function-local statics, cross-thread allocation) verified against the real interception pipeline via CTest. |
 
 ## Status
