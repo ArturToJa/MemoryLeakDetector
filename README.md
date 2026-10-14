@@ -5,7 +5,7 @@
 A C++20 memory leak detector with symbolized stack traces for every allocation still outstanding at program exit. It comes in two forms sharing one engine:
 
 - **`MemoryAnalyzerCore`** - a static library you link in; intercepts global `operator new`/`operator delete`. Windows, Linux, macOS.
-- **`MemoryAnalyzer`** - a library injected into an already-built executable (no source access, no relinking); intercepts `malloc`/`free`/`calloc`/`realloc` as well as `operator new`/`delete`. **Linux** (via `LD_PRELOAD`) and **Windows** (launcher + DLL injection + IAT patching) so far.
+- **`MemoryAnalyzer`** - a library injected into an already-built executable (no source access, no relinking); intercepts `malloc`/`free`/`calloc`/`realloc` as well as `operator new`/`delete`. **Linux** (via `LD_PRELOAD`), **Windows** (launcher + DLL injection + IAT patching) and **macOS** (via `DYLD_INSERT_LIBRARIES` + `DYLD_INTERPOSE`).
 
 ```
 ========== LEAK REPORT ==========
@@ -48,6 +48,16 @@ Usage:
 ```bash
 MEMANALYZER_LOG_PATH=leaks.log LD_PRELOAD=/path/to/libMemoryAnalyzer.so ./your-program
 ```
+
+#### macOS
+
+`libMemoryAnalyzer.dylib`, inserted with `DYLD_INSERT_LIBRARIES`. **[InterposeHooks.cpp](MemoryAnalyzer/macOS/InterposeHooks.cpp)** registers replacements for `malloc`/`free`/`calloc`/`realloc`/`posix_memalign`/`aligned_alloc`/`valloc` in a `__DATA,__interpose` section, which dyld uses to rebind every *other* image's references - so inside a replacement a plain `malloc()` call reaches the real one, with no `dlsym` bootstrap needed. `operator new`/`delete` need no hooks of their own (libc++abi's `operator new` calls `malloc`). Reentrancy uses a pthread-key flag rather than `thread_local`, because macOS allocates thread-local storage through `malloc` on first access.
+
+```bash
+MEMANALYZER_LOG_PATH=leaks.log DYLD_INSERT_LIBRARIES=/path/to/libMemoryAnalyzer.dylib ./your-program
+```
+
+Limits: System Integrity Protection and the hardened runtime strip `DYLD_*` variables from protected/hardened binaries, so those can't be injected; allocations made directly through `malloc_zone_*` bypass the interposed entry points.
 
 #### Windows
 
@@ -94,7 +104,7 @@ CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the full test s
 |---|---|
 | `MemoryAnalyzerEngine/` | Static library with the platform-independent tracking engine (queue, tracker thread, stack capture/symbolization, reentrancy guards), shared by both modes. |
 | `MemoryAnalyzerCore/` | The link-time mode: `operator new`/`delete` overrides plus auto-start runtime - link it into any target. |
-| `MemoryAnalyzer/` | The injection mode: `LD_PRELOAD` library on Linux, launcher + injected DLL on Windows (the target is empty on macOS for now). `MemoryAnalyzer/tests/` holds `LeakyTarget` and the CTest scenarios that run it under the injector and check the log. |
+| `MemoryAnalyzer/` | The injection mode: `LD_PRELOAD` library on Linux, launcher + injected DLL on Windows `libMemoryAnalyzer.dylib` on macOS. `MemoryAnalyzer/tests/` holds `LeakyTarget` and the CTest scenarios that run it under the injector and check the log. |
 | `TestApp/` | A manual smoke test exercising every allocation form (plain/array/nothrow/aligned, matched frees, deliberate leaks). |
 | `TestDLLApp/` | Windows-only demo target: building it also builds `MemoryAnalyzer.dll` and the launcher, and running it (F5 in Visual Studio's folder mode) re-launches itself through the launcher with the DLL injected, then prints the leak report. |
 | `tests/` | Automated tests: `Tracker` unit tests, and end-to-end lifetime scenarios (global objects, function-local statics, cross-thread allocation) verified against the real interception pipeline via CTest. |

@@ -34,6 +34,13 @@ function(add_injection_scenario_test NAME)
         set_tests_properties(${NAME}_Run PROPERTIES
             ENVIRONMENT "MEMANALYZER_LOG_PATH=${logfile}"
         )
+    elseif (APPLE)
+        # dyld's equivalent of LD_PRELOAD. The dylib carries its own
+        # __interpose table, so no flat-namespace flag is needed.
+        add_test(NAME ${NAME}_Run COMMAND MemoryAnalyzerLeakyTarget)
+        set_tests_properties(${NAME}_Run PROPERTIES
+            ENVIRONMENT "DYLD_INSERT_LIBRARIES=$<TARGET_FILE:MemoryAnalyzer>;MEMANALYZER_LOG_PATH=${logfile}"
+        )
     else()
         add_test(NAME ${NAME}_Run COMMAND MemoryAnalyzerLeakyTarget)
         set_tests_properties(${NAME}_Run PROPERTIES

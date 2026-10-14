@@ -403,6 +403,11 @@ bool SymbolResolver::resolve(
             close(devNull);
         }
 
+        // See the Linux branch: when running as an injected library, atos would
+        // otherwise inherit DYLD_INSERT_LIBRARIES and start its own tracking
+        // session, recursing through symbolization forever.
+        unsetenv("DYLD_INSERT_LIBRARIES");
+
         execlp(
             "atos", "atos",
             "-o", info.dli_fname,
