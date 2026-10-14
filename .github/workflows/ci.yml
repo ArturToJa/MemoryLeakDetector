@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        preset: [ x64-Debug, x64-clang-cl-Debug ]
+        preset: [ x64-Debug, x64-clang-cl-Debug, x64-Release, x64-clang-cl-Release ]
 
     steps:
       - uses: actions/checkout@v5
@@ -40,7 +40,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        preset: [ macos-debug ]
+        preset: [ macos-debug, macos-release ]
 
     steps:
       - uses: actions/checkout@v5
@@ -61,7 +61,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        preset: [ linux-debug, linux-clang-debug ]
+        preset: [ linux-debug, linux-clang-debug, linux-release, linux-clang-release ]
 
     steps:
       - uses: actions/checkout@v5

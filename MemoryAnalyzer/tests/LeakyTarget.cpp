@@ -9,6 +9,11 @@
 #include <cstdlib>
 #include <thread>
 
+// Every allocation below is published through this, so an optimizing build
+// can't prove it unused and delete the malloc/free (or new/delete) pair -
+// which would silently turn a leak scenario into a no-op.
+static void* volatile sink;
+
 int main()
 {
     std::printf("LEAKY TARGET START\n");
@@ -16,31 +21,33 @@ int main()
     // malloc, freed - should NOT leak.
     {
         void* p = std::malloc(211);
+        sink = p;
         std::free(p);
     }
 
     // malloc, never freed - should leak.
     {
         void* p = std::malloc(223);
-        (void)p;
+        sink = p;
     }
 
     // new[], freed - should NOT leak.
     {
         char* p = new char[227];
+        sink = p;
         delete[] p;
     }
 
     // new[], never freed - should leak.
     {
         char* p = new char[229];
-        (void)p;
+        sink = p;
     }
 
     // calloc, never freed - should leak.
     {
         void* p = std::calloc(1, 233);
-        (void)p;
+        sink = p;
     }
 
     // realloc growing an allocation; the final size is never freed -
@@ -48,7 +55,7 @@ int main()
     {
         void* p = std::malloc(16);
         p = std::realloc(p, 239);
-        (void)p;
+        sink = p;
     }
 
     // Allocation made and freed entirely on a background thread, joined
@@ -57,6 +64,7 @@ int main()
         std::thread worker([]
             {
                 void* p = std::malloc(241);
+                sink = p;
                 std::free(p);
             });
 
@@ -70,7 +78,7 @@ int main()
         std::thread worker([]
             {
                 void* p = std::malloc(251);
-                (void)p;
+                sink = p;
             });
 
         worker.join();

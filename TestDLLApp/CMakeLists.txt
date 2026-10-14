@@ -55,8 +55,11 @@ add_testdllapp_test(TestDLLApp_FreedNewArray_NotReported
     FAIL_REGULAR_EXPRESSION "\\[LEAK\\][^\n]*\\| 1003 bytes")
 
 # The report is symbolized down to the leaking line in the app's own source.
-add_testdllapp_test(TestDLLApp_Report_HasSourceLocation
-    PASS_REGULAR_EXPRESSION "TestDLLApp\\.cpp:[0-9]+")
+# Only meaningful when the build has debug info (no PDB in a plain Release).
+if (CMAKE_BUILD_TYPE MATCHES "Debug|RelWithDebInfo")
+    add_testdllapp_test(TestDLLApp_Report_HasSourceLocation
+        PASS_REGULAR_EXPRESSION "TestDLLApp\\.cpp:[0-9]+")
+endif()
 
 # Invoking the launcher directly (what the app does internally) runs the
 # target with the DLL injected, and a zero exit code passes the test.
