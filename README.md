@@ -14,8 +14,10 @@ A C++20 memory leak detector with symbolized stack traces for every allocation s
 operator new - NewDelete.cpp:72
 main - TestApp.cpp:29
 ...
-Total leaked: 268 bytes
+Total leaked: 268 bytes in 3 allocations
 ```
+
+Leaks are grouped: allocations of the same size from the same call stack (typically one leaking loop) are reported once, as `[LEAK] <address> | 16 bytes (x40, 640 bytes total)`, and groups are listed biggest-total first. The `Total leaked` line still counts every individual allocation.
 
 ## How it works
 
