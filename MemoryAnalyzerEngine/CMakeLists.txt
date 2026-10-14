@@ -45,3 +45,9 @@ if (WIN32)
             dbghelp
     )
 endif()
+
+# The injection library (a shared module) links this statically, so it must
+# be position-independent.
+set_target_properties(MemoryAnalyzerEngine PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+)
