@@ -22,9 +22,12 @@
 // is patched, regardless of which DLL name (api-ms-win-crt-heap-..., or
 // ucrtbase.dll directly) the import was declared against.
 //
-// Known limits: a target with a statically linked CRT has its own copy of
-// malloc and is invisible to this; delay-loaded imports and
-// GetProcAddress-resolved pointers are not patched.
+// Modules with a statically linked CRT have their own malloc, which no import
+// slot points at; for those (and only those - see Kind::Heap) the OS heap
+// calls the CRT ends in are hooked instead.
+//
+// Known limits: delay-loaded imports and GetProcAddress-resolved pointers
+// are not patched.
 
 #include "AllocHooks.h"
 #include "../Session.h"
@@ -35,6 +38,7 @@
 #include <winternl.h>
 
 #include <cstddef>
+#include <cwchar>
 
 namespace
 {
@@ -99,20 +103,38 @@ namespace
         trackAllocation(fresh, size, 3);
     }
 
+    enum class Kind
+    {
+        // The shared CRT's allocators: patched in every module, and the
+        // presence of any of these in a module's imports is what tells us it
+        // uses the shared CRT (see isStaticCrtCarrier).
+        CrtAlloc,
+
+        // ExitProcess / LoadLibrary*: patched in every module.
+        Always,
+
+        // HeapAlloc/HeapFree/HeapReAlloc: only patched in modules that carry
+        // their own statically linked CRT, whose malloc the CRT patches can't
+        // reach. Patching them everywhere would double count every
+        // allocation the shared CRT makes (it ends in HeapAlloc too).
+        Heap
+    };
+
     struct Patch
     {
         void* real;
         void* hook;
+        Kind kind;
     };
 
     constexpr int MaxPatches = 64;
     Patch patches[MaxPatches];
     int patchCount = 0;
 
-    void addPatch(void* real, void* hook)
+    void addPatch(void* real, void* hook, Kind kind = Kind::Always)
     {
         if (real && hook && patchCount < MaxPatches)
-            patches[patchCount++] = {real, hook};
+            patches[patchCount++] = {real, hook, kind};
     }
 
     // One instantiation per CRT module (0 = ucrtbase, 1 = ucrtbased).
@@ -211,7 +233,7 @@ namespace
         static void resolve(HMODULE crt, const char* name, Fn& real, void* hook)
         {
             real = reinterpret_cast<Fn>(GetProcAddress(crt, name));
-            addPatch(reinterpret_cast<void*>(real), hook);
+            addPatch(reinterpret_cast<void*>(real), hook, Kind::CrtAlloc);
         }
 
         static void setup(const wchar_t* moduleName)
@@ -301,7 +323,95 @@ namespace
         return m;
     }
 
+    // ---- OS heap hooks (for modules with a statically linked CRT) -------
+    //
+    // A module whose CRT is linked in statically has its own copy of malloc,
+    // which no import slot points at - but that malloc (and new, calloc,
+    // realloc, free) bottoms out in HeapAlloc/HeapReAlloc/HeapFree, and
+    // those ARE imports. So for such modules the heap calls are hooked
+    // instead. Sizes and addresses are exact in a release CRT; a debug CRT
+    // adds its own block header, which this level of hooking cannot see
+    // past.
+
+    using HeapAllocFn = LPVOID (WINAPI*)(HANDLE, DWORD, SIZE_T);
+    using HeapFreeFn = BOOL (WINAPI*)(HANDLE, DWORD, LPVOID);
+    using HeapReAllocFn = LPVOID (WINAPI*)(HANDLE, DWORD, LPVOID, SIZE_T);
+
+    HeapAllocFn realHeapAlloc;
+    HeapFreeFn realHeapFree;
+    HeapReAllocFn realHeapReAlloc;
+
+    LPVOID WINAPI hookHeapAlloc(HANDLE heap, DWORD flags, SIZE_T size)
+    {
+        void* p = realHeapAlloc(heap, flags, size);
+        trackAllocation(p, size);
+        return p;
+    }
+
+    BOOL WINAPI hookHeapFree(HANDLE heap, DWORD flags, LPVOID p)
+    {
+        trackDeallocation(p);
+        return realHeapFree(heap, flags, p);
+    }
+
+    LPVOID WINAPI hookHeapReAlloc(HANDLE heap, DWORD flags, LPVOID old, SIZE_T size)
+    {
+        void* p = realHeapReAlloc(heap, flags, old, size);
+        trackRealloc(old, p, size);
+        return p;
+    }
+
     // ---- IAT patching ---------------------------------------------------
+
+    bool isSystemModule(HMODULE module)
+    {
+        wchar_t path[MAX_PATH];
+        wchar_t windows[MAX_PATH];
+
+        DWORD pathLength = GetModuleFileNameW(module, path, MAX_PATH);
+        DWORD windowsLength = GetWindowsDirectoryW(windows, MAX_PATH);
+
+        if (!pathLength || !windowsLength || pathLength >= MAX_PATH || windowsLength >= MAX_PATH)
+            return false;
+
+        return _wcsnicmp(path, windows, windowsLength) == 0;
+    }
+
+    // A module "carries its own CRT" if it allocates through the OS heap
+    // but imports none of the shared CRT's allocators. System DLLs are
+    // excluded: they use the heap directly all the time, and their traffic
+    // isn't the target's.
+    bool isStaticCrtCarrier(
+        HMODULE module,
+        unsigned char* base,
+        IMAGE_IMPORT_DESCRIPTOR* firstDescriptor)
+    {
+        bool importsHeap = false;
+
+        for (auto* desc = firstDescriptor; desc->Name; ++desc)
+        {
+            auto* thunk = reinterpret_cast<IMAGE_THUNK_DATA*>(base + desc->FirstThunk);
+
+            for (; thunk->u1.Function; ++thunk)
+            {
+                void* current = reinterpret_cast<void*>(thunk->u1.Function);
+
+                for (int i = 0; i < patchCount; ++i)
+                {
+                    if (current != patches[i].real)
+                        continue;
+
+                    if (patches[i].kind == Kind::CrtAlloc)
+                        return false;
+
+                    if (patches[i].kind == Kind::Heap)
+                        importsHeap = true;
+                }
+            }
+        }
+
+        return importsHeap && !isSystemModule(module);
+    }
 
     void patchModule(HMODULE module)
     {
@@ -323,6 +433,8 @@ namespace
 
         auto* desc = reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(base + dir.VirtualAddress);
 
+        const bool carrier = isStaticCrtCarrier(module, base, desc);
+
         for (; desc->Name; ++desc)
         {
             auto* thunk = reinterpret_cast<IMAGE_THUNK_DATA*>(base + desc->FirstThunk);
@@ -335,6 +447,9 @@ namespace
                 {
                     if (current != patches[i].real)
                         continue;
+
+                    if (patches[i].kind == Kind::Heap && !carrier)
+                        break;
 
                     DWORD oldProtect = 0;
 
@@ -377,10 +492,10 @@ namespace
     }
 
     template <typename Fn>
-    void resolveKernel(HMODULE kernel, const char* name, Fn& real, void* hook)
+    void resolveKernel(HMODULE kernel, const char* name, Fn& real, void* hook, Kind kind = Kind::Always)
     {
         real = reinterpret_cast<Fn>(GetProcAddress(kernel, name));
-        addPatch(reinterpret_cast<void*>(real), hook);
+        addPatch(reinterpret_cast<void*>(real), hook, kind);
     }
 }
 
@@ -400,6 +515,10 @@ namespace Hooks
         resolveKernel(kernel, "LoadLibraryW", realLoadLibraryW, reinterpret_cast<void*>(&hookLoadLibraryW));
         resolveKernel(kernel, "LoadLibraryExA", realLoadLibraryExA, reinterpret_cast<void*>(&hookLoadLibraryExA));
         resolveKernel(kernel, "LoadLibraryExW", realLoadLibraryExW, reinterpret_cast<void*>(&hookLoadLibraryExW));
+
+        resolveKernel(kernel, "HeapAlloc", realHeapAlloc, reinterpret_cast<void*>(&hookHeapAlloc), Kind::Heap);
+        resolveKernel(kernel, "HeapFree", realHeapFree, reinterpret_cast<void*>(&hookHeapFree), Kind::Heap);
+        resolveKernel(kernel, "HeapReAlloc", realHeapReAlloc, reinterpret_cast<void*>(&hookHeapReAlloc), Kind::Heap);
 
         patchAllModules();
     }

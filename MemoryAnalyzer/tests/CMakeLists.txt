@@ -155,4 +155,70 @@ if (WIN32)
     add_loadlibrary_test(W)
     add_loadlibrary_test(ExA)
     add_loadlibrary_test(ExW)
+
+    # The same program as LeakyTarget, but with the CRT linked statically
+    # (/MT, /MTd): its malloc is a private copy no import slot points at, so
+    # the CRT-level IAT hooks can't see it. Exercises the OS-heap fallback.
+    add_executable(MemoryAnalyzerStaticCrtTarget
+        LeakyTarget.cpp
+    )
+
+    target_compile_features(MemoryAnalyzerStaticCrtTarget
+        PRIVATE
+            cxx_std_20
+    )
+
+    set_target_properties(MemoryAnalyzerStaticCrtTarget PROPERTIES
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+    )
+
+    function(add_static_crt_test NAME)
+        set(logfile "${CMAKE_CURRENT_BINARY_DIR}/${NAME}.log")
+
+        add_test(NAME ${NAME}_Run
+            COMMAND MemoryAnalyzerLauncher
+                $<TARGET_FILE:MemoryAnalyzer>
+                $<TARGET_FILE:MemoryAnalyzerStaticCrtTarget>
+        )
+        set_tests_properties(${NAME}_Run PROPERTIES
+            ENVIRONMENT "MEMANALYZER_LOG_PATH=${logfile}"
+            PASS_REGULAR_EXPRESSION "LEAKY TARGET END"
+            FIXTURES_SETUP ${NAME}
+        )
+
+        add_test(NAME ${NAME}_CheckLog COMMAND ${CMAKE_COMMAND} -E cat "${logfile}")
+        set_tests_properties(${NAME}_CheckLog PROPERTIES
+            FIXTURES_REQUIRED ${NAME}
+            ${ARGN}
+        )
+    endfunction()
+
+    # A debug static CRT wraps every block in its own header, which hooking
+    # at the OS-heap level can't see past, so exact byte counts only hold
+    # for a release CRT here.
+    if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+        add_static_crt_test(Injection_StaticCrt_MallocUnfreed_Leaks
+            PASS_REGULAR_EXPRESSION "\\[LEAK\\][^\n]*\\| 223 bytes")
+
+        add_static_crt_test(Injection_StaticCrt_MallocFreed_NoLeak
+            FAIL_REGULAR_EXPRESSION "\\[LEAK\\][^\n]*\\| 211 bytes")
+
+        add_static_crt_test(Injection_StaticCrt_NewArrayUnfreed_Leaks
+            PASS_REGULAR_EXPRESSION "\\[LEAK\\][^\n]*\\| 229 bytes")
+
+        add_static_crt_test(Injection_StaticCrt_NewArrayFreed_NoLeak
+            FAIL_REGULAR_EXPRESSION "\\[LEAK\\][^\n]*\\| 227 bytes")
+
+        add_static_crt_test(Injection_StaticCrt_CallocUnfreed_Leaks
+            PASS_REGULAR_EXPRESSION "\\[LEAK\\][^\n]*\\| 233 bytes")
+
+        add_static_crt_test(Injection_StaticCrt_ReallocUnfreed_Leaks
+            PASS_REGULAR_EXPRESSION "\\[LEAK\\][^\n]*\\| 239 bytes")
+
+        add_static_crt_test(Injection_StaticCrt_BackgroundThreadFreed_NoLeak
+            FAIL_REGULAR_EXPRESSION "\\[LEAK\\][^\n]*\\| 241 bytes")
+
+        add_static_crt_test(Injection_StaticCrt_BackgroundThreadUnfreed_Leaks
+            PASS_REGULAR_EXPRESSION "\\[LEAK\\][^\n]*\\| 251 bytes")
+    endif()
 endif()
