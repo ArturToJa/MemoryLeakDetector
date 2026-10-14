@@ -33,6 +33,17 @@ jobs:
       - name: Test
         run: ctest --preset ${{ matrix.preset }} --output-on-failure
 
+      # On failure, re-run just the failed tests and publish their output as
+      # a workflow annotation - those are readable through the public API,
+      # unlike the raw job log, so a failure can be diagnosed without logging
+      # in to GitHub.
+      - name: Report test failures
+        if: failure()
+        shell: bash
+        run: |
+          ctest --preset ${{ matrix.preset }} --rerun-failed --output-on-failure > ctest-failures.log 2>&1 || true
+          python3 -c "import sys; t = sys.stdin.read()[:30000]; print('::error title=ctest failures (${{ matrix.preset }})::' + t.replace('%', '%25').replace(chr(13), '%0D').replace(chr(10), '%0A'))" < ctest-failures.log
+
   macos:
     name: macOS (${{ matrix.preset }})
     runs-on: macos-latest
@@ -54,6 +65,17 @@ jobs:
       - name: Test
         run: ctest --preset ${{ matrix.preset }} --output-on-failure
 
+      # On failure, re-run just the failed tests and publish their output as
+      # a workflow annotation - those are readable through the public API,
+      # unlike the raw job log, so a failure can be diagnosed without logging
+      # in to GitHub.
+      - name: Report test failures
+        if: failure()
+        shell: bash
+        run: |
+          ctest --preset ${{ matrix.preset }} --rerun-failed --output-on-failure > ctest-failures.log 2>&1 || true
+          python3 -c "import sys; t = sys.stdin.read()[:30000]; print('::error title=ctest failures (${{ matrix.preset }})::' + t.replace('%', '%25').replace(chr(13), '%0D').replace(chr(10), '%0A'))" < ctest-failures.log
+
   linux:
     name: Linux (${{ matrix.preset }})
     runs-on: ubuntu-latest
@@ -74,3 +96,14 @@ jobs:
 
       - name: Test
         run: ctest --preset ${{ matrix.preset }} --output-on-failure
+
+      # On failure, re-run just the failed tests and publish their output as
+      # a workflow annotation - those are readable through the public API,
+      # unlike the raw job log, so a failure can be diagnosed without logging
+      # in to GitHub.
+      - name: Report test failures
+        if: failure()
+        shell: bash
+        run: |
+          ctest --preset ${{ matrix.preset }} --rerun-failed --output-on-failure > ctest-failures.log 2>&1 || true
+          python3 -c "import sys; t = sys.stdin.read()[:30000]; print('::error title=ctest failures (${{ matrix.preset }})::' + t.replace('%', '%25').replace(chr(13), '%0D').replace(chr(10), '%0A'))" < ctest-failures.log
