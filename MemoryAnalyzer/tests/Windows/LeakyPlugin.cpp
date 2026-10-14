@@ -6,16 +6,21 @@
 
 #include <cstdlib>
 
+// Published through this so an optimizing build can't prove the
+// allocations unused and delete them (clang-cl does; MSVC happens not to).
+static void* volatile sink;
+
 extern "C" __declspec(dllexport) void leakInPlugin()
 {
     // Freed - must NOT be reported.
     void* freed = std::malloc(3003);
+    sink = freed;
     std::free(freed);
 
     // Never freed - must be reported (malloc, then new[]).
     void* leakedMalloc = std::malloc(3001);
-    (void)leakedMalloc;
+    sink = leakedMalloc;
 
     char* leakedArray = new char[3007];
-    (void)leakedArray;
+    sink = leakedArray;
 }

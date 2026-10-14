@@ -35,30 +35,36 @@
 
 namespace
 {
+    // Every allocation below is published through this, so an optimizing
+    // build can't prove it unused and delete it (clang-cl does).
+    void* volatile sink;
+
     int runLeakyCode()
     {
         std::printf("[TestDLLApp] running under the injector\n");
 
         // Freed - must NOT show up in the report.
         void* freed = std::malloc(1001);
+        sink = freed;
         std::free(freed);
 
         char* freedArray = new char[1003];
+        sink = freedArray;
         delete[] freedArray;
 
         // Never freed - each should be reported with its stack trace.
         void* leakedMalloc = std::malloc(2001);
-        (void)leakedMalloc;
+        sink = leakedMalloc;
 
         char* leakedArray = new char[2003];
-        (void)leakedArray;
+        sink = leakedArray;
 
         auto* leakedVector = new std::vector<int>(500);
-        (void)leakedVector; // 500 ints + the vector object itself
+        sink = leakedVector; // 500 ints + the vector object itself
 
         void* grown = std::malloc(16);
         grown = std::realloc(grown, 2005);
-        (void)grown;
+        sink = grown;
 
         std::printf("[TestDLLApp] done; expect leaks of 2001, 2003, 2005 bytes "
                     "(+ 2000 and the vector object)\n");

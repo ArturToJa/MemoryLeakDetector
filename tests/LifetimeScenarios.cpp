@@ -52,7 +52,10 @@ namespace
     // Global raw pointer: nothing ever runs a destructor for this, so its
     // allocation is never freed. Intentionally leaked to demonstrate the
     // "still reachable at exit" case described above.
-    char* globalNeverFreed = new char[151];
+    // volatile: nothing ever reads this, so without it an optimizing build
+    // deletes the allocation entirely (it is a never-used internal-linkage
+    // object) and the scenario silently stops leaking.
+    char* volatile globalNeverFreed = new char[151];
 
     // Meyer's singleton: lazily constructed on first call, destructed
     // automatically at program exit with the same guarantee as
