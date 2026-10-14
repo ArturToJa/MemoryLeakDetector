@@ -71,7 +71,9 @@ set MEMANALYZER_LOG_PATH=leaks.log
 MemoryAnalyzerLauncher.exe MemoryAnalyzer.dll your-program.exe [args...]
 ```
 
-Limits: a target with a statically linked CRT carries its own `malloc` and is invisible to IAT patching; delay-loaded imports and `GetProcAddress`-resolved pointers aren't patched; attaching to an already-running process isn't supported (a late attach would miss earlier allocations).
+Static CRT: a module that links the CRT statically has its own private `malloc`, which no import slot points at, so for modules that import `HeapAlloc` but none of the shared CRT's allocators (and aren't system DLLs) the OS heap calls `HeapAlloc`/`HeapFree`/`HeapReAlloc` are hooked instead. Hooking them only in those modules keeps the shared CRT's allocations from being counted twice. In a release CRT, sizes and addresses are exact; a debug static CRT wraps each block in its own header, which this level can't see past, so sizes are over-reported and `malloc` can't be told apart from `new`. (True inline hooking of the static `malloc` by PDB symbol would fix that, but needs symbols and a hooking library, and isn't implemented.)
+
+Limits: delay-loaded imports and `GetProcAddress`-resolved pointers aren't patched; attaching to an already-running process isn't supported (a late attach would miss earlier allocations).
 
 ## What this can and can't catch
 
