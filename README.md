@@ -115,5 +115,5 @@ CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the full test s
 - ✅ Automated tests covering allocation forms, object lifetimes, and multi-threaded allocation.
 - ✅ Shared engine extracted into `MemoryAnalyzerEngine`; Core is now a thin layer over it.
 - ✅ Linux injection library (`LD_PRELOAD`): `malloc`/`free`/`calloc`/`realloc` and `operator new`/`delete`, with end-to-end CTest scenarios (freed/leaked malloc, `new[]`, calloc, realloc, background threads).
-- ⏳ Windows injection (DLL injection + IAT patching) - not started.
-- ⏳ macOS injection (`DYLD_INSERT_LIBRARIES` + `DYLD_INTERPOSE`) - not started.
+- ✅ Windows injection (launcher + DLL injection + IAT patching), running the same CTest scenarios plus `LoadLibrary`-hook and `TestDLLApp` end-to-end tests.
+- ✅ macOS injection (`DYLD_INSERT_LIBRARIES` + `DYLD_INTERPOSE`), running the same CTest scenarios on a real Mac in CI.
