@@ -24,6 +24,12 @@
 
 namespace
 {
+    // Every local allocation below is published through this, so an
+    // optimizing build can't prove it unused and delete the new/delete pair
+    // (the standard allows eliding even a replaced operator new) - which
+    // would silently turn a leak scenario into a no-op.
+    void* volatile sink;
+
     struct HeapOwner
     {
         explicit HeapOwner(std::size_t size)
@@ -65,13 +71,14 @@ int main()
     // Local scope: allocated and freed before the scope ends. Should NOT leak.
     {
         char* p = new char[101];
+        sink = p;
         delete[] p;
     }
 
     // Local scope: allocated, never freed. Should leak.
     {
         char* p = new char[103];
-        (void)p;
+        sink = p;
     }
 
     // Force the function-local static singleton to construct.
@@ -84,6 +91,7 @@ int main()
         std::thread worker([]
             {
                 char* p = new char[163];
+                sink = p;
                 delete[] p;
             });
 
@@ -98,7 +106,7 @@ int main()
         std::thread worker([]
             {
                 char* p = new char[167];
-                (void)p;
+                sink = p;
             });
 
         worker.join();
