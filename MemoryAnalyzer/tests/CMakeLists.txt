@@ -76,3 +76,76 @@ add_injection_scenario_test(Injection_BackgroundThreadFreed_NoLeak
 
 add_injection_scenario_test(Injection_BackgroundThreadUnfreed_Leaks
     PASS_REGULAR_EXPRESSION "\\[LEAK\\][^\n]*\\| 251 bytes")
+
+if (WIN32)
+    # Covers the injector's LoadLibrary hook: a plugin DLL loaded *after*
+    # injection must still have its allocations tracked, which only happens
+    # if the hook re-patches the module list once the load returns. The
+    # target does not link the plugin, so there is no other way for the
+    # plugin's import table to get patched.
+    add_library(MemoryAnalyzerLeakyPlugin SHARED
+        Windows/LeakyPlugin.cpp
+    )
+
+    target_compile_features(MemoryAnalyzerLeakyPlugin
+        PRIVATE
+            cxx_std_20
+    )
+
+    add_executable(MemoryAnalyzerLoadLibraryTarget
+        Windows/LoadLibraryTarget.cpp
+    )
+
+    target_compile_features(MemoryAnalyzerLoadLibraryTarget
+        PRIVATE
+            cxx_std_20
+    )
+
+    add_dependencies(MemoryAnalyzerLoadLibraryTarget
+        MemoryAnalyzerLeakyPlugin
+    )
+
+    # MODE is which LoadLibrary flavour the target calls (A, W, ExA, ExW).
+    function(add_loadlibrary_test MODE)
+        set(NAME Injection_LoadLibrary${MODE})
+        set(logfile "${CMAKE_CURRENT_BINARY_DIR}/${NAME}.log")
+
+        add_test(NAME ${NAME}_Run
+            COMMAND MemoryAnalyzerLauncher
+                $<TARGET_FILE:MemoryAnalyzer>
+                $<TARGET_FILE:MemoryAnalyzerLoadLibraryTarget>
+                $<TARGET_FILE:MemoryAnalyzerLeakyPlugin>
+                ${MODE}
+        )
+        set_tests_properties(${NAME}_Run PROPERTIES
+            ENVIRONMENT "MEMANALYZER_LOG_PATH=${logfile}"
+            PASS_REGULAR_EXPRESSION "LOADLIB TARGET END"
+            FIXTURES_SETUP ${NAME}
+        )
+
+        # Both leaks made inside the plugin are reported...
+        add_test(NAME ${NAME}_Malloc_Leaks COMMAND ${CMAKE_COMMAND} -E cat "${logfile}")
+        set_tests_properties(${NAME}_Malloc_Leaks PROPERTIES
+            FIXTURES_REQUIRED ${NAME}
+            PASS_REGULAR_EXPRESSION "\\[LEAK\\][^\n]*\\| 3001 bytes"
+        )
+
+        add_test(NAME ${NAME}_NewArray_Leaks COMMAND ${CMAKE_COMMAND} -E cat "${logfile}")
+        set_tests_properties(${NAME}_NewArray_Leaks PROPERTIES
+            FIXTURES_REQUIRED ${NAME}
+            PASS_REGULAR_EXPRESSION "\\[LEAK\\][^\n]*\\| 3007 bytes"
+        )
+
+        # ...and the block it freed is not.
+        add_test(NAME ${NAME}_Freed_NotReported COMMAND ${CMAKE_COMMAND} -E cat "${logfile}")
+        set_tests_properties(${NAME}_Freed_NotReported PROPERTIES
+            FIXTURES_REQUIRED ${NAME}
+            FAIL_REGULAR_EXPRESSION "\\[LEAK\\][^\n]*\\| 3003 bytes"
+        )
+    endfunction()
+
+    add_loadlibrary_test(A)
+    add_loadlibrary_test(W)
+    add_loadlibrary_test(ExA)
+    add_loadlibrary_test(ExW)
+endif()
