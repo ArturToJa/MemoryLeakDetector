@@ -7,19 +7,30 @@ on:
     branches: [ main ]
 
 jobs:
-  windows:
-    name: Windows (${{ matrix.preset }})
-    runs-on: windows-latest
+  build-and-test:
+    name: ${{ matrix.platform }} (${{ matrix.preset }})
+    runs-on: ${{ matrix.os }}
 
     strategy:
       fail-fast: false
       matrix:
-        preset: [ x64-Debug, x64-clang-cl-Debug, x64-Release, x64-clang-cl-Release ]
+        include:
+          - { platform: Windows, os: windows-latest, preset: x64-Debug }
+          - { platform: Windows, os: windows-latest, preset: x64-Release }
+          - { platform: Windows, os: windows-latest, preset: x64-clang-cl-Debug }
+          - { platform: Windows, os: windows-latest, preset: x64-clang-cl-Release }
+          - { platform: macOS, os: macos-latest, preset: macos-debug }
+          - { platform: macOS, os: macos-latest, preset: macos-release }
+          - { platform: Linux, os: ubuntu-latest, preset: linux-debug }
+          - { platform: Linux, os: ubuntu-latest, preset: linux-release }
+          - { platform: Linux, os: ubuntu-latest, preset: linux-clang-debug }
+          - { platform: Linux, os: ubuntu-latest, preset: linux-clang-release }
 
     steps:
       - uses: actions/checkout@v5
 
       - name: Set up MSVC developer environment
+        if: matrix.platform == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
@@ -33,77 +44,11 @@ jobs:
       - name: Test
         run: ctest --preset ${{ matrix.preset }} --output-on-failure
 
-      # On failure, re-run just the failed tests and publish their output as
-      # a workflow annotation - those are readable through the public API,
-      # unlike the raw job log, so a failure can be diagnosed without logging
-      # in to GitHub.
+      # Re-run just the failed tests and publish their output as an
+      # annotation, so a failure can be read without logging in to GitHub.
       - name: Report test failures
         if: failure()
         shell: bash
         run: |
           ctest --preset ${{ matrix.preset }} --rerun-failed --output-on-failure > ctest-failures.log 2>&1 || true
-          python3 -c "import sys; t = sys.stdin.read()[:30000]; print('::error title=ctest failures (${{ matrix.preset }})::' + t.replace('%', '%25').replace(chr(13), '%0D').replace(chr(10), '%0A'))" < ctest-failures.log
-
-  macos:
-    name: macOS (${{ matrix.preset }})
-    runs-on: macos-latest
-
-    strategy:
-      fail-fast: false
-      matrix:
-        preset: [ macos-debug, macos-release ]
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Configure
-        run: cmake --preset ${{ matrix.preset }}
-
-      - name: Build
-        run: cmake --build --preset ${{ matrix.preset }}
-
-      - name: Test
-        run: ctest --preset ${{ matrix.preset }} --output-on-failure
-
-      # On failure, re-run just the failed tests and publish their output as
-      # a workflow annotation - those are readable through the public API,
-      # unlike the raw job log, so a failure can be diagnosed without logging
-      # in to GitHub.
-      - name: Report test failures
-        if: failure()
-        shell: bash
-        run: |
-          ctest --preset ${{ matrix.preset }} --rerun-failed --output-on-failure > ctest-failures.log 2>&1 || true
-          python3 -c "import sys; t = sys.stdin.read()[:30000]; print('::error title=ctest failures (${{ matrix.preset }})::' + t.replace('%', '%25').replace(chr(13), '%0D').replace(chr(10), '%0A'))" < ctest-failures.log
-
-  linux:
-    name: Linux (${{ matrix.preset }})
-    runs-on: ubuntu-latest
-
-    strategy:
-      fail-fast: false
-      matrix:
-        preset: [ linux-debug, linux-clang-debug, linux-release, linux-clang-release ]
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Configure
-        run: cmake --preset ${{ matrix.preset }}
-
-      - name: Build
-        run: cmake --build --preset ${{ matrix.preset }}
-
-      - name: Test
-        run: ctest --preset ${{ matrix.preset }} --output-on-failure
-
-      # On failure, re-run just the failed tests and publish their output as
-      # a workflow annotation - those are readable through the public API,
-      # unlike the raw job log, so a failure can be diagnosed without logging
-      # in to GitHub.
-      - name: Report test failures
-        if: failure()
-        shell: bash
-        run: |
-          ctest --preset ${{ matrix.preset }} --rerun-failed --output-on-failure > ctest-failures.log 2>&1 || true
-          python3 -c "import sys; t = sys.stdin.read()[:30000]; print('::error title=ctest failures (${{ matrix.preset }})::' + t.replace('%', '%25').replace(chr(13), '%0D').replace(chr(10), '%0A'))" < ctest-failures.log
+          python3 .github/scripts/report_ctest_failures.py ctest-failures.log "${{ matrix.preset }}"
