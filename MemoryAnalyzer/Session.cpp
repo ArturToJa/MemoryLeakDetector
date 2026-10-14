@@ -9,6 +9,11 @@
 #include <cstdlib>
 #include <mutex>
 
+namespace Session
+{
+    void shutdown();
+}
+
 namespace
 {
     EventQueue& getEventQueueInternal()
@@ -40,6 +45,31 @@ namespace
     std::atomic<bool> initialized{false};
     std::atomic<bool> shutdownComplete{false};
 
+    void doInitialize()
+    {
+        InterceptorGuard guard;
+
+        getSessionTracker();
+        getEventQueueInternal();
+
+        SymbolResolver::instance().initialize();
+
+        getTrackerThread().start();
+
+#ifndef _WIN32
+        // On Windows the injected DLL's own atexit handlers only run at DLL
+        // detach, by which point the process's other threads (including our
+        // tracker thread) are already gone - the ExitProcess hook calls
+        // Session::shutdown() instead, while everything is still alive.
+        std::atexit(&Session::shutdown);
+#endif
+
+        initialized = true;
+    }
+}
+
+namespace Session
+{
     void shutdown()
     {
         if (!initialized)
@@ -52,6 +82,8 @@ namespace
 
         SymbolResolver::instance().shutdown();
 
+        Logging::stream().flush();
+
         // See Session.h - once this is set, ensureInitialized() refuses to
         // touch any of the above again, regardless of which allocation or
         // deallocation, from any thread or any other library torn down
@@ -59,25 +91,6 @@ namespace
         shutdownComplete = true;
     }
 
-    void doInitialize()
-    {
-        InterceptorGuard guard;
-
-        getSessionTracker();
-        getEventQueueInternal();
-
-        SymbolResolver::instance().initialize();
-
-        getTrackerThread().start();
-
-        std::atexit(&shutdown);
-
-        initialized = true;
-    }
-}
-
-namespace Session
-{
     bool ensureInitialized()
     {
         if (initialized)

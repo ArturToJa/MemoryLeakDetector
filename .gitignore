@@ -1,2 +1,9 @@
 out/
 .vs/
+
+# Visual Studio project files and build output (CMake is the real build)
+x64/
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln

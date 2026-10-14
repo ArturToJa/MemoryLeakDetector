@@ -5,7 +5,11 @@
 #include <iostream>
 #include <sstream>
 
+#ifdef _WIN32
+#include <process.h>
+#else
 #include <unistd.h>
+#endif
 
 namespace
 {
@@ -16,11 +20,19 @@ namespace
         if (envPath && *envPath)
             return envPath;
 
+#ifdef _WIN32
+        const char* tmpDir = std::getenv("TEMP");
+        const char* fallbackDir = ".";
+        const int pid = _getpid();
+#else
         const char* tmpDir = std::getenv("TMPDIR");
+        const char* fallbackDir = "/tmp";
+        const int pid = getpid();
+#endif
 
         std::ostringstream path;
-        path << (tmpDir && *tmpDir ? tmpDir : "/tmp")
-             << "/memoryanalyzer-" << getpid() << ".log";
+        path << (tmpDir && *tmpDir ? tmpDir : fallbackDir)
+             << "/memoryanalyzer-" << pid << ".log";
 
         return path.str();
     }

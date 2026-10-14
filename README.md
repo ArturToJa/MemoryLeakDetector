@@ -5,7 +5,7 @@
 A C++20 memory leak detector with symbolized stack traces for every allocation still outstanding at program exit. It comes in two forms sharing one engine:
 
 - **`MemoryAnalyzerCore`** - a static library you link in; intercepts global `operator new`/`operator delete`. Windows, Linux, macOS.
-- **`MemoryAnalyzer`** - a library injected into an already-built executable (no source access, no relinking); intercepts `malloc`/`free`/`calloc`/`realloc` as well as `operator new`/`delete`. **Linux only so far** (via `LD_PRELOAD`).
+- **`MemoryAnalyzer`** - a library injected into an already-built executable (no source access, no relinking); intercepts `malloc`/`free`/`calloc`/`realloc` as well as `operator new`/`delete`. **Linux** (via `LD_PRELOAD`) and **Windows** (launcher + DLL injection + IAT patching) so far.
 
 ```
 ========== LEAK REPORT ==========
@@ -32,20 +32,36 @@ Total leaked: 268 bytes
 - **[NewDelete.cpp](MemoryAnalyzerCore/NewDelete.cpp)** overrides every `operator new`/`delete` variant (plain, array, nothrow, aligned), performs the allocation via `PlatformMemory`, captures a stack trace and pushes an event onto the queue.
 - **[Runtime](MemoryAnalyzerCore/Runtime.h)** auto-starts everything via a static initializer and registers an `atexit` handler to print the leak report - linking `MemoryAnalyzerCore` into a project is meant to be enough, no code changes required.
 
-### Injection mode (`MemoryAnalyzer`, Linux)
+### Injection mode (`MemoryAnalyzer`)
+
+Shared by both platforms: **[Session](MemoryAnalyzer/Session.h)** is the injection counterpart of `Runtime` (purely lazy initialization on the first hooked call, declining to track once shutdown has completed), and **[Logging](MemoryAnalyzer/Logging.cpp)** writes the leak report to a file rather than the target's stdout: `$MEMANALYZER_LOG_PATH` if set, otherwise `$TMPDIR`/`$TEMP` (or `/tmp`)`/memoryanalyzer-<pid>.log`. On Linux the path is announced on stderr.
+
+#### Linux
 
 A `MODULE` library (`libMemoryAnalyzer.so`) loaded with `LD_PRELOAD`:
 
 - **[MallocHooks.cpp](MemoryAnalyzer/Linux/MallocHooks.cpp)** overrides `malloc`/`free`/`calloc`/`realloc`; **[NewDeleteHooks.cpp](MemoryAnalyzer/NewDeleteHooks.cpp)** overrides the `operator new`/`delete` set, same as Core.
 - **[RealAllocator](MemoryAnalyzer/Linux/RealAllocator.h)** does the real allocation work through `dlsym(RTLD_NEXT, ...)`-resolved functions (calling `malloc` by name would bind back to the hooks), with a small static bootstrap buffer to survive `dlsym` calling `calloc` during resolution.
-- **[Session](MemoryAnalyzer/Session.h)** is the injection counterpart of `Runtime`: purely lazy initialization on the first hooked call, declining to track once shutdown has completed.
-- **[Logging](MemoryAnalyzer/Logging.cpp)** writes the leak report to a file rather than the target's stdout: `$MEMANALYZER_LOG_PATH` if set, otherwise `$TMPDIR` (or `/tmp`)`/memoryanalyzer-<pid>.log`. The path is announced on stderr.
 
 Usage:
 
 ```bash
 MEMANALYZER_LOG_PATH=leaks.log LD_PRELOAD=/path/to/libMemoryAnalyzer.so ./your-program
 ```
+
+#### Windows
+
+`MemoryAnalyzer.dll` plus **`MemoryAnalyzerLauncher.exe`**, which starts the target suspended, injects the DLL with a remote `LoadLibraryW` thread, then resumes it - so hooks are in place before the target's own CRT startup runs:
+
+- **[AllocHooks.cpp](MemoryAnalyzer/Windows/AllocHooks.cpp)** patches the import address table of every loaded module (matching by the real function's address), redirecting the UCRT's `malloc`/`free`/`calloc`/`realloc`/`_aligned_malloc`/`_aligned_free` (and the `_dbg` variants) to tracking hooks. `operator new`/`delete` need no hooks of their own - they bottom out in these calls, so each allocation is seen exactly once. Release (`ucrtbase.dll`) and debug (`ucrtbased.dll`) CRTs are hooked independently. `LoadLibrary*` is hooked too, so modules loaded later are patched, and `ExitProcess` is hooked so the leak report runs while the tracker thread is still alive.
+- **[Launcher.cpp](MemoryAnalyzer/Windows/Launcher.cpp)** forwards the target's arguments, stdio handles and exit code.
+
+```bat
+set MEMANALYZER_LOG_PATH=leaks.log
+MemoryAnalyzerLauncher.exe MemoryAnalyzer.dll your-program.exe [args...]
+```
+
+Limits: a target with a statically linked CRT carries its own `malloc` and is invisible to IAT patching; delay-loaded imports and `GetProcAddress`-resolved pointers aren't patched; attaching to an already-running process isn't supported (a late attach would miss earlier allocations).
 
 ## What this can and can't catch
 
@@ -78,7 +94,7 @@ CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the full test s
 |---|---|
 | `MemoryAnalyzerEngine/` | Static library with the platform-independent tracking engine (queue, tracker thread, stack capture/symbolization, reentrancy guards), shared by both modes. |
 | `MemoryAnalyzerCore/` | The link-time mode: `operator new`/`delete` overrides plus auto-start runtime - link it into any target. |
-| `MemoryAnalyzer/` | The injection mode: `LD_PRELOAD` library (Linux only for now; the target is skipped on Windows/macOS). `MemoryAnalyzer/tests/` holds `LeakyTarget` and the CTest scenarios that run it under `LD_PRELOAD` and check the log. |
+| `MemoryAnalyzer/` | The injection mode: `LD_PRELOAD` library on Linux, launcher + injected DLL on Windows (the target is empty on macOS for now). `MemoryAnalyzer/tests/` holds `LeakyTarget` and the CTest scenarios that run it under the injector and check the log. |
 | `TestApp/` | A manual smoke test exercising every allocation form (plain/array/nothrow/aligned, matched frees, deliberate leaks). |
 | `tests/` | Automated tests: `Tracker` unit tests, and end-to-end lifetime scenarios (global objects, function-local statics, cross-thread allocation) verified against the real interception pipeline via CTest. |
 

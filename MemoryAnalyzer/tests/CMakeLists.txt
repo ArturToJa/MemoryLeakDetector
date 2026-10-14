@@ -23,9 +23,25 @@ target_link_libraries(MemoryAnalyzerLeakyTarget
 function(add_injection_scenario_test NAME)
     set(logfile "${CMAKE_CURRENT_BINARY_DIR}/${NAME}.log")
 
-    add_test(NAME ${NAME}_Run COMMAND MemoryAnalyzerLeakyTarget)
+    if (WIN32)
+        # No LD_PRELOAD on Windows - the launcher starts the target
+        # suspended and injects the DLL into it instead.
+        add_test(NAME ${NAME}_Run
+            COMMAND MemoryAnalyzerLauncher
+                $<TARGET_FILE:MemoryAnalyzer>
+                $<TARGET_FILE:MemoryAnalyzerLeakyTarget>
+        )
+        set_tests_properties(${NAME}_Run PROPERTIES
+            ENVIRONMENT "MEMANALYZER_LOG_PATH=${logfile}"
+        )
+    else()
+        add_test(NAME ${NAME}_Run COMMAND MemoryAnalyzerLeakyTarget)
+        set_tests_properties(${NAME}_Run PROPERTIES
+            ENVIRONMENT "LD_PRELOAD=$<TARGET_FILE:MemoryAnalyzer>;MEMANALYZER_LOG_PATH=${logfile}"
+        )
+    endif()
+
     set_tests_properties(${NAME}_Run PROPERTIES
-        ENVIRONMENT "LD_PRELOAD=$<TARGET_FILE:MemoryAnalyzer>;MEMANALYZER_LOG_PATH=${logfile}"
         PASS_REGULAR_EXPRESSION "LEAKY TARGET END"
         FIXTURES_SETUP ${NAME}
     )

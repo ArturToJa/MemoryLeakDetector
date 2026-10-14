@@ -21,4 +21,10 @@ namespace Session
     bool ensureInitialized();
 
     EventQueue& getEventQueue();
+
+    // Stops the tracker thread and prints the leak report. Safe to call
+    // more than once (and before initialization); only the first call after
+    // a successful initialization does anything. Registered via atexit on
+    // POSIX; on Windows the injected DLL calls it from its ExitProcess hook.
+    void shutdown();
 }
