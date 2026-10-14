@@ -144,6 +144,7 @@ bool SymbolResolver::resolve(
 #include <sys/wait.h>
 
 #include <cinttypes>
+#include <cstdlib>
 #include <cstdio>
 
 SymbolResolver& SymbolResolver::instance()
@@ -222,6 +223,12 @@ bool SymbolResolver::resolve(
             dup2(devNull, STDERR_FILENO);
             close(devNull);
         }
+
+        // When running as an LD_PRELOAD injection library, addr2line would
+        // otherwise inherit the preload, start its own tracking session
+        // (clobbering the shared log file), and symbolize its own leftover
+        // allocations by spawning yet another addr2line - recursing forever.
+        unsetenv("LD_PRELOAD");
 
         execlp(
             "addr2line", "addr2line",
@@ -312,6 +319,7 @@ bool SymbolResolver::resolve(
 #include <sys/wait.h>
 
 #include <cinttypes>
+#include <cstdlib>
 #include <cstdio>
 
 SymbolResolver& SymbolResolver::instance()
